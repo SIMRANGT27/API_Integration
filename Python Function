@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION DWH_DEV.DEV.USER_ACTIVITY_LOGS("DATE1" DATE, "DATE2" DATE)
+CREATE OR REPLACE FUNCTION DWH_TEST.DEV.USER_ACTIVITY_LOGS("DATE1" DATE, "DATE2" DATE)
 RETURNS VARIANT
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.9'
@@ -20,7 +20,7 @@ def custom_widget_job_trigger_hndlr(date1, date2):
     debug = []  
     result = []
     
-    url = f"https://api.test.com/v1/activity_logs?start_time={date1}&end_time={date2}"
+    url = f"https://api.test.com/activity_logs?start_time={date1}&end_time={date2}"
     response = requests.get(url, headers=headers)
   
     # Check if the response status code indicates success (200 range)  
@@ -34,7 +34,7 @@ def custom_widget_job_trigger_hndlr(date1, date2):
             cursor=meta[''cursor'']
             
             while(nextPG):
-                url= f"https://api.test.com/v1/activity_logs?cursor={cursor}&start_time={date1}&end_time={date2}"
+                url= f"https://api.test.com/activity_logs?cursor={cursor}&start_time={date1}&end_time={date2}"
                 tempR= requests.get(url, headers=headers)
                 tempResult=tempR.json()
                 result.append(tempResult)
