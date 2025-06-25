@@ -27,7 +27,7 @@ $$
             
     snowflake.createStatement( {sqlText: `
 
-                     create or replace temp TABLE FIGMA_ACTIVITY_LOGS_INCR_TEMP as 
+                     create or replace temp TABLE USER_ACTIVITY_LOGS_INCR_TEMP as 
                      select 
 
                      distinct 
