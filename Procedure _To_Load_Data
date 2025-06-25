@@ -1,0 +1,98 @@
+CREATE OR REPLACE PROCEDURE USER_ACITITY_LOGS_INCREMENTAL()  
+RETURNS string  
+LANGUAGE JAVASCRIPT  
+EXECUTE AS CALLER  
+AS  
+$$  
+    var today_date = snowflake.createStatement({ sqlText: ` SELECT CAST( CAST(CURRENT_DATE AS DATE) AS VARCHAR ) AS today_date;` }).execute();  
+    var oned_before = snowflake.createStatement({ sqlText:` SELECT CAST( CAST(DATEADD(day, -1 , CURRENT_DATE) AS DATE) AS VARCHAR)  AS oned_before;` }).execute();  
+    
+        today_date.next();
+        oned_before.next();
+    
+    // Execute the stored procedure with the fetched dates  
+      var result_set = snowflake.createStatement({  
+        sqlText: `CALL parse_json( USER_ACTIVITY_LOGS(?, ?) );`,  
+        binds: [oned_before.getColumnValue(1),today_date.getColumnValue(1)]  
+    }).execute(); 
+
+    
+    if (result_set.next()) {  
+        result = result_set.getColumnValue(1);  
+    }
+
+    snowflake.createStatement({ sqlText: `create temp table TEMP_USER_ACTIVITY_LOGS_INCR( activity_logs ) as SELECT * from (select parse_json(?) ) ;`,
+                binds:[ JSON.stringify(result) ]
+            }).execute();
+            
+    snowflake.createStatement( {sqlText: `
+
+                     create or replace temp TABLE FIGMA_ACTIVITY_LOGS_INCR_TEMP as 
+                     select 
+
+                     distinct 
+                     to_char(z.value:action:details:access) "access"
+                    ,to_char(z.value:action:details:type) "details_type"
+                    ,to_char(z.value:type) "type"
+                    ,to_char(z.value:actor:email) "email"
+                    ,to_char(z.value:actor:id) "actor_id"
+                    ,to_char(z.value:actor:name) "name"
+                    ,to_char(z.value:actor:type) "action_type"
+                    ,to_char(z.value:context:client_name) "client_name"
+                    ,to_char(z.value:context:ip_address) "ip_address"
+                    ,to_char(z.value:context:is_figma_support_team_action) "is_figma_support_team_action"
+                    ,to_char(z.value:context:org_id) "org_id"
+                    ,to_char(z.value:context:team_id) "team_id"
+                    ,to_char(z.value:entity:editor_type) "editor_type"
+                    ,to_char(z.value:entity:key) "key"
+                    ,to_char(z.value:entity:link_access) "link_access"
+                    ,to_char(z.value:entity:name) "entity_name"
+                    ,to_char(z.value:entity:proto_link_access) "proto_link_access"
+                    ,to_char(z.value:entity:type) "entity_type"
+                    ,to_char(z.value:id) "id"
+                    ,to_char(z.value:timestamp) "timestamp"
+                    ,cast( cast( '${today_date.getColumnValue(1)}' as date ) as varchar) as "LOAD_DATE"
+                    
+                    from TEMP_USER_ACTIVITY_LOGS_INCR f   
+                                        , lateral flatten( input => parse_json(f.activity_logs)  )  d 
+                                        , lateral flatten ( input => parse_json(d.value)  ) g 
+                                        , lateral flatten ( input => parse_json(g.value) , path => 'meta' )  h 
+                                        , lateral flatten ( input => h.value  ) as z; ` }  ).execute();
+                                        
+                                        
+    var test_final = snowflake.createStatement({sqlText:` SELECT top 1 * FROM information_schema.tables WHERE table_catalog = 'DWH_TEST' and table_schema = 'DEV' AND table_name='USER_ACTIVITY_LOGS_INCR'; `}).execute() ;
+            
+             if (!test_final.next())                                                 
+            {
+                snowflake.createStatement({ sqlText: `create table USER_ACTIVITY_LOGS_INCR as select * from USER_ACTIVITY_LOGS_INCR_TEMP ; `}).execute();
+            }
+            else {
+                 snowflake.createStatement({ sqlText: `
+                 insert into USER_ACTIVITY_LOGS_INCR(
+                     "access"
+                    ,"details_type"
+                    ,"type"
+                    ,"email"
+                    ,"actor_id"
+                    ,"name"
+                    ,"action_type"
+                    ,"client_name"
+                    ,"ip_address"
+                    ,"is_figma_support_team_action"
+                    ,"org_id"
+                    ,"team_id"
+                    ,"editor_type"
+                    ,"key"
+                    ,"link_access"
+                    ,"entity_name"
+                    ,"proto_link_access"
+                    ,"entity_type"
+                    ,"id"
+                    ,"timestamp"
+                    ,"LOAD_DATE"
+                 )
+                 select * from USER_ACTIVITY_LOGS_INCR_TEMP ; ` }).execute();
+            }
+                    
+return JSON.stringify(oned_before) + JSON.stringify(today_date) ;
+$$;  
