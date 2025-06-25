@@ -1,0 +1,56 @@
+CREATE OR REPLACE FUNCTION DWH_DEV.DEV.USER_ACTIVITY_LOGS("DATE1" DATE, "DATE2" DATE)
+RETURNS VARIANT
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.9'
+PACKAGES = ('requests','snowflake-snowpark-python')
+HANDLER = 'custom_widget_job_trigger_hndlr'
+EXTERNAL_ACCESS_INTEGRATIONS = (TEST_ACCESS_INTEGRATION)
+SECRETS = ('cred'=TEST_KEY)
+AS '  
+import _snowflake  
+import requests  
+import json  
+import datetime
+
+
+def custom_widget_job_trigger_hndlr(date1, date2): 
+    mytoken = _snowflake.get_generic_secret_string(''cred'')  
+    headers = {"Authorization": f"{mytoken}"} 
+    
+    debug = []  
+    result = []
+    
+    url = f"https://api.test.com/v1/activity_logs?start_time={date1}&end_time={date2}"
+    response = requests.get(url, headers=headers)
+  
+    # Check if the response status code indicates success (200 range)  
+    if response.ok:  
+        try:  
+            resp = response.json()
+            meta=resp[''meta'']
+            result.append(resp)
+
+            nextPG=meta[''next_page'']
+            cursor=meta[''cursor'']
+            
+            while(nextPG):
+                url= f"https://api.test.com/v1/activity_logs?cursor={cursor}&start_time={date1}&end_time={date2}"
+                tempR= requests.get(url, headers=headers)
+                tempResult=tempR.json()
+                result.append(tempResult)
+                meta=tempResult[''meta'']
+                nextPG=meta[''next_page'']
+                cursor=meta[''cursor'']
+            
+        except json.JSONDecodeError:  
+            return json.dumps({  
+                "error": f"Failed to decode JSON response. Status Code: {response.status_code}, Response Text: {response.text}"  
+            })  
+    else:  
+        return json.dumps({  
+            "error": f"API call failed. Status Code: {response.status_code}, Response Text: {response.text}"  
+        })  
+
+    return json.dumps( {f"data btw {date1} and {date2} is :":result} ) 
+'
+;
